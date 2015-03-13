@@ -1,85 +1,66 @@
+'use strict';
+
 /*
 Usage: <wysiwyg textarea-id="question" textarea-class="form-control"  textarea-height="80px" textarea-name="textareaQuestion" textarea-required ng-model="question.question" enable-bootstrap-title="true"></wysiwyg>
     options
         textarea-id             The id to assign to the editable div
         textarea-class          The class(es) to assign to the the editable div
         textarea-height         If not specified in a text-area class then the hight of the editable div (default: 80px)
-        textarea-name           The name attribute of the editable div 
+        textarea-name           The name attribute of the editable div
         textarea-required       HTML/AngularJS required validation
         textarea-menu           Array of Arrays that contain the groups of buttons to show Defualt:Show all button groups
         ng-model                The angular data model
-        enable-bootstrap-title  True/False whether or not to show the button hover title styled with bootstrap  
+        enable-bootstrap-title  True/False whether or not to show the button hover title styled with bootstrap
 
-Requires: 
+Requires:
     Twitter-bootstrap, fontawesome, jquery, angularjs, bootstrap-color-picker (https://github.com/buberdds/angular-bootstrap-colorpicker)
 
 */
 
-/*
-    TODO: 
-        X disabled - buttons and contenteditable div
-        ng-model-options
-        tab support
-        custom button fuctions
-
-        limit use of scope
-        use compile fuction instead of $compile
-        move button elements to js objects and use doc fragments 
-*/
-
-(function(angular, undefined) {
-
-    'use strict';
-
-    var DEFAULT_MENU = [
-        ['bold', 'italic', 'underline', 'strikethrough', 'subscript', 'superscript'],
-        ['font'],
-        ['font-size'],
-        ['font-color', 'hilite-color'],
-        ['remove-format'],
-        ['ordered-list', 'unordered-list', 'outdent', 'indent'],
-        ['left-justify', 'center-justify', 'right-justify'],
-        ['code', 'quote', 'paragraph'],
-        ['link', 'image']
-    ];
-
-    angular.module('wysiwyg.module', ['colorpicker.module'])
-        .directive('wysiwyg', function($timeout, wysiwgGui, $compile) {
-            return {
-                template: '<div>' +
-                    '<style>' +
-                    '   .wysiwyg-textarea[contentEditable="false"]{ background-color:#eee}' +
-                    '   .wysiwyg-btn-group-margin{  margin-right:5px; }' +
-                    '   .wysiwyg-select{ height:30px;margin-bottom:1px;}' +
-                    '   .wysiwyg-colorpicker{ font-family: arial, sans-serif !important;font-size:16px !important; padding:2px 10px !important;}' +
-                    '</style>' +
-                    '<div class="wysiwyg-menu"></div>' +
-                    '<div id="{{textareaId}}" ng-attr-style="resize:vertical;height:{{textareaHeight || \'80px\'}}; overflow:auto" contentEditable="{{!disabled}}" class="{{textareaClass}} wysiwyg-textarea" rows="{{textareaRows}}" name="{{textareaName}}" required="{{textareaRequired}}" placeholder="{{textareaPlaceholder}}" ng-model="value"></div>' +
-                    '</div>',
-                restrict: 'E',
-                scope: {
-                    value: '=ngModel',
-                    textareaHeight: '@textareaHeight',
-                    textareaName: '@textareaName',
-                    textareaPlaceholder: '@textareaPlaceholder',
-                    textareaClass: '@textareaClass',
-                    textareaRequired: '@textareaRequired',
-                    textareaId: '@textareaId',
-                    textareaMenu: '=textareaMenu',
-                    textareaCustomMenu: '=',
-                    disabled: '=?disabled'
-                },
-                replace: true,
-                require: 'ngModel',
-                link: link
-            }
-
-            function link(scope, element, attrs, ngModelController) {
-
+angular.module('wysiwyg.module', ['colorpicker.module'])
+    .directive('wysiwyg', function($timeout, wysiwgGui, $compile) {
+        return {
+            template: '<div></div>',
+            restrict: 'E',
+            scope: {
+                value: '=ngModel',
+                textareaHeight: '@textareaHeight',
+                textareaName: '@textareaName',
+                textareaPlaceholder: '@textareaPlaceholder',
+                textareaClass: '@textareaClass',
+                textareaRequired: '@textareaRequired',
+                textareaId: '@textareaId',
+                textareaMenu: '@textareaMenu'
+            },
+            replace: true,
+            require: 'ngModel',
+            link: function(scope, element, attrs, ngModelController) {
+                //Create the menu system
+                element.html(wysiwgGui.createMenu(attrs.textareaMenu));
+                $compile(element.contents())(scope);
 
                 var textarea = element.find('div.wysiwyg-textarea');
+                scope.code   = false;
 
-                scope.isLink = false;
+                scope.fonts = [
+                    'Georgia',
+                    'Palatino Linotype',
+                    'Times New Roman',
+                    'Arial',
+                    'Helvetica',
+                    'Arial Black',
+                    'Comic Sans MS',
+                    'Impact',
+                    'Lucida Sans Unicode',
+                    'Tahoma',
+                    'Trebuchet MS',
+                    'Verdana',
+                    'Courier New',
+                    'Lucida Console',
+                    'Helvetica Neue'
+                ].sort();
+
+                scope.font = scope.fonts[6];
 
                 scope.fontSizes = [{
                     value: '1',
@@ -103,117 +84,25 @@ Requires:
                     value: '7',
                     size: '48px'
                 }];
-              
+
                 scope.fontSize = scope.fontSizes[1];
- 
-                scope.fonts = [
-                    'Georgia',
-                    'Palatino Linotype',
-                    'Times New Roman',
-                    'Arial',
-                    'Helvetica',
-                    'Arial Black',
-                    'Comic Sans MS',
-                    'Impact',
-                    'Lucida Sans Unicode',
-                    'Tahoma',
-                    'Trebuchet MS',
-                    'Verdana',
-                    'Courier New',
-                    'Lucida Console',
-                    'Helvetica Neue'
-                ].sort();
-                
-                scope.font = scope.fonts[6];
 
-                init();
-
-                function init() {
-                    
-                    compileMenu();
-                    configureDisabledWatch();
-                    configureBootstrapTitle();
-                    configureListeners();
-                }
-
-                function compileMenu() {
-                    wysiwgGui.setCustomElements(scope.textareaCustomMenu)
-                    var menuDiv = document.querySelector('div.wysiwyg-menu');
-                    menuDiv.appendChild(wysiwgGui.createMenu(scope.textareaMenu));
-                    $compile(menuDiv)(scope);
-                }
-
-                function configureDisabledWatch() {
-                    scope.$watch('disabled', function(newValue) {
-                        angular.element('div.wysiwyg-menu').find('button').each(function() {
-                            angular.element(this).attr('disabled', newValue);
-                        });
-                        angular.element('div.wysiwyg-menu').find('select').each(function() {
-                            angular.element(this).attr('disabled', newValue);
-                        })
+                if (attrs.enableBootstrapTitle === "true" && attrs.enableBootstrapTitle !== undefined)
+                    element.find('button[title]').tooltip({
+                        container: 'body'
                     })
-                }
 
-                function configureBootstrapTitle() {
-                    if (attrs.enableBootstrapTitle === "true" && attrs.enableBootstrapTitle !== undefined){
-                        element.find('button[title]').tooltip({
-                            container: 'body'
-                        })
+                textarea.on('input keyup paste mouseup', function(event) {
+                    var html = textarea.html();
+
+                    if (html == '<br>') {
+                        html = '';
                     }
-                }
+                    ngModelController.$setViewValue(html);
+                });
 
-                function configureListeners() {
 
-                    textarea.on('input keyup paste mouseup', function(event) {
-                        var html = textarea.html();
-
-                        if (html == '<br>') {
-                            html = '';
-                        }
-                        ngModelController.$setViewValue(html);
-                    });
-
-                    textarea.on('click keyup focus mouseup', function() {
-                        $timeout(function() {
-                            scope.isBold = scope.cmdState('bold');
-                            scope.isUnderlined = scope.cmdState('underline');
-                            scope.isStrikethrough = scope.cmdState('strikethrough');
-                            scope.isItalic = scope.cmdState('italic');
-                            scope.isSuperscript = itemIs('SUP'); //scope.cmdState('superscript');
-                            scope.isSubscript = itemIs('SUB'); //scope.cmdState('subscript');    
-                            scope.isRightJustified = scope.cmdState('justifyright');
-                            scope.isLeftJustified = scope.cmdState('justifyleft');
-                            scope.isCenterJustified = scope.cmdState('justifycenter');
-                            scope.isPre = scope.cmdValue('formatblock') == "pre";
-                            scope.isBlockquote = scope.cmdValue('formatblock') == "blockquote";
-
-                            scope.isOrderedList = scope.cmdState('insertorderedlist');
-                            scope.isUnorderedList = scope.cmdState('insertunorderedlist');
-
-                            scope.fonts.forEach(function(v, k) { //works but kinda crappy.
-                                if (scope.cmdValue('fontname').indexOf(v) > -1) {
-                                    scope.font = v;
-                                    return false;
-                                }
-                            });
-
-                            scope.fontSizes.forEach(function(v, k) {
-                                if (scope.cmdValue('fontsize') === v.value) {
-                                    scope.fontSize = v;
-                                    return false;
-                                }
-                            })
-
-                            scope.hiliteColor = getHiliteColor();
-                            element.find('button.wysiwyg-hiliteColor').css("background-color", scope.hiliteColor);
-
-                            scope.fontColor = scope.cmdValue('forecolor');
-                            element.find('button.wysiwyg-fontcolor').css("color", scope.fontColor);
-
-                            scope.isLink = itemIs('A');
-                        }, 10);
-                    });
-                }
+                scope.isLink = false;
 
                 //Used to detect things like A tags and others that dont work with cmdValue().
                 function itemIs(tag) {
@@ -250,6 +139,47 @@ Requires:
                     }
                 }
 
+                textarea.on('click keyup focus mouseup', function() {
+                    $timeout(function() {
+                        scope.isBold = scope.cmdState('bold');
+                        scope.isUnderlined = scope.cmdState('underline');
+                        scope.isStrikethrough = scope.cmdState('strikethrough');
+                        scope.isItalic = scope.cmdState('italic');
+                        scope.isSuperscript = itemIs('SUP'); //scope.cmdState('superscript');
+                        scope.isSubscript = itemIs('SUB'); //scope.cmdState('subscript');
+                        scope.isRightJustified = scope.cmdState('justifyright');
+                        scope.isLeftJustified = scope.cmdState('justifyleft');
+                        scope.isCenterJustified = scope.cmdState('justifycenter');
+                        scope.isPre = scope.cmdValue('formatblock') == "pre";
+                        scope.isBlockquote = scope.cmdValue('formatblock') == "blockquote";
+
+                        scope.isOrderedList = scope.cmdState('insertorderedlist');
+                        scope.isUnorderedList = scope.cmdState('insertunorderedlist');
+
+                        scope.fonts.forEach(function(v, k) { //works but kinda crappy.
+                            if (scope.cmdValue('fontname').indexOf(v) > -1) {
+                                scope.font = v;
+                                return false;
+                            }
+                        });
+
+                        scope.fontSizes.forEach(function(v, k) {
+                            if (scope.cmdValue('fontsize') === v.value) {
+                                scope.fontSize = v;
+                                return false;
+                            }
+                        })
+
+                        scope.hiliteColor = getHiliteColor();
+                        element.find('button.wysiwyg-hiliteColor').css("background-color", scope.hiliteColor);
+
+                        scope.fontColor = scope.cmdValue('forecolor');
+                        element.find('button.wysiwyg-fontcolor').css("color", scope.fontColor);
+
+                        scope.isLink = itemIs('A');
+                    }, 10);
+                });
+
                 // model -> view
                 ngModelController.$render = function() {
                     textarea.html(ngModelController.$viewValue);
@@ -257,6 +187,10 @@ Requires:
 
                 scope.format = function(cmd, arg) {
                     document.execCommand(cmd, false, arg);
+                }
+
+                scope.seeSource = function(){
+                  scope.code = !scope.code;
                 }
 
                 scope.cmdState = function(cmd, id) {
@@ -297,538 +231,156 @@ Requires:
 
                 scope.format('enableobjectresizing', true);
                 scope.format('styleWithCSS', true);
-            };
-        })
-        .factory('wysiwgGui', function(wysiwgGuiElements) {
 
-            var ELEMENTS = wysiwgGuiElements;
-            var custom = {};
 
-            var setCustomElements = function(el){
-                custom = el;
+            }
+        };
+    })
+    .factory('wysiwgGui', function() {
+
+        var defaultMenu = [
+            ['bold', 'italic', 'underline', 'strikethrough', 'subscript', 'superscript'],
+            ['font'],
+            ['font-size'],
+            ['remove-format'],
+            ['link', 'image'],
+            ['ordered-list', 'unordered-list', 'outdent', 'indent'],
+            ['left-justify', 'center-justify', 'right-justify'],
+            ['code', 'quote', 'paragragh'],
+
+        ];
+
+        var getMenuStyles = function() {
+            return '<style>' +
+                '   .wysiwyg-btn-group-margin{  margin-right:5px; }' +
+                '   .wysiwyg-select{ height:30px;margin-bottom:1px;}' +
+                '   .wysiwyg-colorpicker{ font-family: arial, sans-serif !important;font-size:16px !important; padding:2px 10px !important;}' +
+                '</style>';
+        }
+
+        var getMenuTextArea = function() {
+            var html = '<div ng-class="{hide: code}" id="{{textareaId}}" ng-attr-style="resize:vertical;height:{{textareaHeight || \'80px\'}}; overflow:auto" contentEditable="true" class="{{textareaClass}} wysiwyg-textarea" rows="{{textareaRows}}" name="{{textareaName}}" required="{{textareaRequired}}" placeholder="{{textareaPlaceholder}}" ng-model="value"></div>';
+            html += '<textarea style="height:{{textareaHeight || \'80px\'}}; min-height:{{textareaHeight || \'80px\'}};" ng-model="value" ng-class="{hide: !code}"></textarea>';
+            return html;
+        }
+
+        var getMenuGroup = function() {
+            return '<div class="btn-group btn-group-sm wysiwyg-btn-group-margin">'
+        }
+
+        var getMenuItem = function(item) {
+            item = item.toLowerCase().replace(' ', '-');
+            switch (item) {
+                case 'bold':
+                    return '<button ng-disabled="code" title="Bold" tabindex="-1" type="button" unselectable="on" class="btn btn-default" ng-click="format(\'bold\')" ng-class="{ active: isBold}"><i class="fa fa-bold"></i></button>';
+                    break;
+                case 'italic':
+                    return '<button ng-disabled="code" title="Italic" tabindex="-1" type="button" unselectable="on" class="btn btn-default" ng-click="format(\'italic\')" ng-class="{ active: isItalic}"><i class="fa fa-italic"></i></button>';
+                    break;
+                case 'underline':
+                    return '<button ng-disabled="code" title="Underline" tabindex="-1" type="button" unselectable="on" class="btn btn-default" ng-click="format(\'underline\')" ng-class="{ active: isUnderlined}"><i class="fa fa-underline"></i></button>';
+                    break;
+                case 'strikethrough':
+                    return '<button ng-disabled="code" title="Strikethrough" tabindex="-1" type="button" unselectable="on" class="btn btn-default" ng-click="format(\'strikethrough\')" ng-class="{ active: isStrikethrough}"><i class="fa fa-strikethrough"></i></button>';
+                    break;
+                case 'subscript':
+                    return '<button ng-disabled="code" title="Subscript" tabindex="-1" type="button" unselectable="on" class="btn btn-default" ng-click="format(\'subscript\')" ng-class="{ active: isSubscript}"><i class="fa fa-subscript"></i></button>';
+                    break;
+                case 'superscript':
+                    return '<button ng-disabled="code" title="Superscript" tabindex="-1" type="button" unselectable="on" class="btn btn-default" ng-click="format(\'superscript\')" ng-class="{ active: isSuperscript}"><i class="fa fa-superscript"></i></button>';
+                    break;
+                case 'font':
+                    return '<select ng-disabled="code" tabindex="-1"  unselectable="on" class="form-control wysiwyg-select" ng-model="font" ng-options="f for f in fonts" ng-change="setFont()"></select>';
+                    break;
+                case 'font-size':
+                    return '<select ng-disabled="code" unselectable="on" tabindex="-1" class="form-control wysiwyg-select" ng-model="fontSize" ng-options="f.size for f in fontSizes" ng-change="setFontSize()"></select>';
+                    break;
+                case 'font-color':
+                    return '<button ng-disabled="code" title="Font Color" tabindex="-1" colorpicker="rgba" type="button" colorpicker-position="top" class="btn btn-default ng-valid ng-dirty wysiwyg-colorpicker wysiwyg-fontcolor" ng-model="fontColor" ng-change="setFontColor()">A</button>';
+                    break;
+                case 'hilite-color':
+                    return '<button ng-disabled="code" title="Hilite Color" tabindex="-1" colorpicker="rgba" type="button" colorpicker-position="top" class="btn btn-default ng-valid ng-dirty wysiwyg-colorpicker wysiwyg-hiliteColor" ng-model="hiliteColor" ng-change="setHiliteColor()">H</button>';
+                    break;
+                case 'remove-format':
+                    return '<button ng-disabled="code" title="Remove Formatting" tabindex="-1" type="button" unselectable="on" class="btn btn-default" ng-click="format(\'removeFormat\')" ><i class="fa fa-eraser"></i></button>';
+                    break;
+                case 'ordered-list':
+                    return '<button ng-disabled="code" title="Ordered List" tabindex="-1" type="button" unselectable="on" class="btn btn-default" ng-click="format(\'insertorderedlist\')" ng-class="{ active: isOrderedList}"><i class="fa fa-list-ol"></i></button>';
+                    break;
+                case 'unordered-list':
+                    return '<button ng-disabled="code" title="Unordered List" tabindex="-1" type="button" unselectable="on" class="btn btn-default" ng-click="format(\'insertunorderedlist\')" ng-class="{ active: isUnorderedList}"><i class="fa fa-list-ul"></i></button>';
+                    break;
+                case 'outdent':
+                    return '<button ng-disabled="code" title="Outdent" tabindex="-1" type="button" unselectable="on" class="btn btn-default" ng-click="format(\'outdent\')"><i class="fa fa-outdent"></i></button>';
+                    break;
+                case 'indent':
+                    return '<button ng-disabled="code" title="Indent" tabindex="-1" type="button" unselectable="on" class="btn btn-default" ng-click="format(\'indent\')"><i class="fa fa-indent"></i></button>';
+                    break;
+                case 'left-justify':
+                    return '<button ng-disabled="code" title="Left Justify" tabindex="-1" type="button" unselectable="on" class="btn btn-default" ng-click="format(\'justifyleft\')" ng-class="{ active: isLeftJustified}"><i class="fa fa-align-left"></i></button>';
+                    break;
+                case 'center-justify':
+                    return '<button ng-disabled="code" title="Center Justify" tabindex="-1" type="button" unselectable="on" class="btn btn-default" ng-click="format(\'justifycenter\')" ng-class="{ active: isCenterJustified}"><i class="fa fa-align-center"></i></button>';
+                    break;
+                case 'right-justify':
+                    return '<button ng-disabled="code" title="Right Justify" tabindex="-1" type="button" unselectable="on" class="btn btn-default" ng-click="format(\'justifyright\')" ng-class="{ active: isRightJustified}"><i class="fa fa-align-right"></i></button>';
+                    break;
+                case 'code':
+                    return '<button title="Code" tabindex="-1" type="button" unselectable="on" class="btn btn-default" ng-click="seeSource()"  ng-class="{ active: code}"><i class="fa fa-code"></i></button>';
+                    break;
+                case 'quote':
+                    return '<button ng-disabled="code" title="Quote" tabindex="-1" type="button" unselectable="on" class="btn btn-default" ng-click="format(\'formatblock\', \'blockquote\')"  ng-class="{ active: isBlockquote}"><i class="fa fa-quote-right"></i></button>';
+                    break;
+                case 'paragragh':
+                    return '<button ng-disabled="code" title="Paragragh" tabindex="-1" type="button" unselectable="on" class="btn btn-default" ng-click="format(\'insertParagraph\')"  ng-class="{ active: isParagraph}">P</button>';
+                    break;
+                case 'link':
+                    return '<button ng-disabled="code" ng-show="!isLink" tabindex="-1" title="Link" type="button" unselectable="on" class="btn btn-default" ng-click="createLink()"><i class="fa fa-link" ></i> </button>' +
+                        '<button ng-disabled="code" ng-show="isLink" tabindex="-1" title="Unlink" type="button" unselectable="on" class="btn btn-default" ng-click="format(\'unlink\')"><i class="fa fa-unlink"></i> </button>';
+                    break;
+                case 'image':
+                    return '<button ng-disabled="code" title="Image" tabindex="-1" type="button" unselectable="on" class="btn btn-default" ng-click="insertImage()"><i class="fa fa-picture-o"></i> </button>';
+                    break;
+                default:
+                    console.log('Angular.wysiwyg: Unknown menu item.')
+                    return '';
+                    break;
             }
 
-            var getMenuGroup = function() {
-                return {
-                    tag: 'div',
-                    classes: 'btn-group btn-group-sm wysiwyg-btn-group-margin',
+        }
+
+        var createMenu = function(menu) {
+
+            if (angular.isDefined(menu) && menu !== '')
+                menu = stringToArray(menu)
+            else
+                menu = defaultMenu;
+
+            var menuHtml = '<div class="wysiwyg-menu">';
+            menuHtml += getMenuStyles();
+
+            for (var i = 0; i < menu.length; i++) {
+                menuHtml += getMenuGroup();
+                for (var j = 0; j < menu[i].length; j++) {
+                    menuHtml += getMenuItem(menu[i][j]);
                 }
+                menuHtml += '</div>';
             }
+            menuHtml += getMenuTextArea();
+            menuHtml += '</div>';
+            return menuHtml;
+        }
 
-            var getMenuItem = function(item) {
-                return ELEMENTS[item] || {};
-            }
+        var stringToArray = function(string) {
+            var ret;
+            try {
+                ret = JSON.parse(string.replace(/'/g, '"'));
+            } catch (e) {}
+            return ret;
+        }
 
-            var createMenu = function(menu) {
+        return {
+            createMenu: createMenu
+        }
 
-                angular.extend(ELEMENTS, custom);
-
-                //Get the default menu or the passed in menu
-                if (angular.isDefined(menu) && menu !== '')
-                    menu = menu //stringToArray(menu)
-                else
-                    menu = DEFAULT_MENU;
-
-                //create div to add everything to.
-                var startDiv = document.createElement('div');
-
-                for (var i = 0; i < menu.length; i++) {
-                    var menuGroup = create(getMenuGroup());
-
-                    for (var j = 0; j < menu[i].length; j++) {
-                        //link has two functions link and unlink
-                        if (menu[i][j] === 'link') {
-                            var el = create(getMenuItem('unlink'));
-                            menuGroup.appendChild(el);
-                        }
-
-                        var el = create(getMenuItem(menu[i][j]));
-                        menuGroup.appendChild(el);
-                    }
-
-                    startDiv.appendChild(menuGroup);
-                }
-                return startDiv;
-            }
-
-
-            function create(obj) {
-                var el;
-                if (obj.tag) {
-                    el = document.createElement(obj.tag);
-                } else if (obj.text) {
-                    el = document.createElement('span');
-                } else {
-                    console.log('cannot create this element.');
-                    el = document.createElement('span');
-                    return el;
-                }
-
-                if (obj.text) {
-                    el.innerText = obj.text;
-                }
-
-                if (obj.classes) {
-                    el.className = obj.classes;
-                }
-
-                if (obj.html) {
-                    el.innerHTML = obj.html;
-                }
-
-                if (obj.attributes && obj.attributes.length) {
-                    for (var i in obj.attributes) {
-                        var attr = obj.attributes[i];
-                        if (attr.name && attr.value) {
-                            el.setAttribute(attr.name, attr.value);
-                        }
-                    }
-                }
-
-                if (obj.data && obj.data.length) {
-                    for (var item in obj.data) {
-                        el.appendChild(create(obj.data[item]));
-                    }
-                }
-
-                return el;
-            }
-
-            var stringToArray = function(string) {
-                var ret;
-                try {
-                    ret = JSON.parse(string.replace(/'/g, '"'));
-                } catch (e) {}
-                return ret;
-            }
-
-            return {
-                createMenu: createMenu,
-                setCustomElements: setCustomElements
-            }
-
-        })
-        .value('wysiwgGuiElements', {
-            'bold': {
-                tag: 'button',
-                classes: 'btn btn-default',
-                attributes: [{
-                    name: "title",
-                    value: 'Bold'
-                }, {
-                    name: 'ng-click',
-                    value: 'format(\'bold\')'
-                }, {
-                    name: 'ng-class',
-                    value: '{ active: isBold }'
-                }],
-                data: [{
-                    tag: 'i',
-                    classes: 'fa fa-bold'
-                }]
-            },
-            'italic': {
-                tag: 'button',
-                classes: 'btn btn-default',
-                attributes: [{
-                    name: "title",
-                    value: 'Italic'
-                }, {
-                    name: 'ng-click',
-                    value: 'format(\'italic\')'
-                }, {
-                    name: 'ng-class',
-                    value: '{ active: isItalic }'
-                }],
-                data: [{
-                    tag: 'i',
-                    classes: 'fa fa-italic'
-                }]
-            },
-            'underline': {
-                tag: 'button',
-                classes: 'btn btn-default',
-                attributes: [{
-                    name: "title",
-                    value: 'Underline'
-                }, {
-                    name: 'ng-click',
-                    value: 'format(\'underline\')'
-                }, {
-                    name: 'ng-class',
-                    value: '{ active: isUnderline }'
-                }],
-                data: [{
-                    tag: 'i',
-                    classes: 'fa fa-underline'
-                }]
-            },
-            'strikethrough': {
-                tag: 'button',
-                classes: 'btn btn-default',
-                attributes: [{
-                    name: "title",
-                    value: 'Strikethrough'
-                }, {
-                    name: 'ng-click',
-                    value: 'format(\'strikethrough\')'
-                }, {
-                    name: 'ng-class',
-                    value: '{ active: isStrikethrough }'
-                }],
-                data: [{
-                    tag: 'i',
-                    classes: 'fa fa-strikethrough'
-                }]
-            },
-            'subscript': {
-                tag: 'button',
-                classes: 'btn btn-default',
-                attributes: [{
-                    name: "title",
-                    value: 'Subscript'
-                }, {
-                    name: 'ng-click',
-                    value: 'format(\'subscript\')'
-                }, {
-                    name: 'ng-class',
-                    value: '{ active: isSubscript }'
-                }],
-                data: [{
-                    tag: 'i',
-                    classes: 'fa fa-subscript'
-                }]
-            },
-            'superscript': {
-                tag: 'button',
-                classes: 'btn btn-default',
-                attributes: [{
-                    name: "title",
-                    value: 'Superscript'
-                }, {
-                    name: 'ng-click',
-                    value: 'format(\'superscript\')'
-                }, {
-                    name: 'ng-class',
-                    value: '{ active: isSuperscript }'
-                }],
-                data: [{
-                    tag: 'i',
-                    classes: 'fa fa-superscript'
-                }]
-            },
-            'remove-format': {
-                tag: 'button',
-                classes: 'btn btn-default',
-                attributes: [{
-                    name: "title",
-                    value: 'Remove Formatting'
-                }, {
-                    name: 'ng-click',
-                    value: 'format(\'removeFormat\')'
-                }],
-                data: [{
-                    tag: 'i',
-                    classes: 'fa fa-eraser'
-                }]
-            },
-            'ordered-list': {
-                tag: 'button',
-                classes: 'btn btn-default',
-                attributes: [{
-                    name: "title",
-                    value: 'Ordered List'
-                }, {
-                    name: 'ng-click',
-                    value: 'format(\'insertorderedlist\')'
-                }, {
-                    name: 'ng-class',
-                    value: '{ active: isOrderedList }'
-                }],
-                data: [{
-                    tag: 'i',
-                    classes: 'fa fa-list-ol'
-                }]
-            },
-            'unordered-list': {
-                tag: 'button',
-                classes: 'btn btn-default',
-                attributes: [{
-                    name: "title",
-                    value: 'Unordered List'
-                }, {
-                    name: 'ng-click',
-                    value: 'format(\'insertunorderedlist\')'
-                }, {
-                    name: 'ng-class',
-                    value: '{ active: isUnorderedList }'
-                }],
-                data: [{
-                    tag: 'i',
-                    classes: 'fa fa-list-ul'
-                }]
-            },
-            'outdent': {
-                tag: 'button',
-                classes: 'btn btn-default',
-                attributes: [{
-                    name: "title",
-                    value: 'Outdent'
-                }, {
-                    name: 'ng-click',
-                    value: 'format(\'outdent\')'
-                }],
-                data: [{
-                    tag: 'i',
-                    classes: 'fa fa-outdent'
-                }]
-            },
-            'indent': {
-                tag: 'button',
-                classes: 'btn btn-default',
-                attributes: [{
-                    name: "title",
-                    value: 'Indent'
-                }, {
-                    name: 'ng-click',
-                    value: 'format(\'indent\')'
-                }],
-                data: [{
-                    tag: 'i',
-                    classes: 'fa fa-indent'
-                }]
-            },
-            'left-justify': {
-                tag: 'button',
-                classes: 'btn btn-default',
-                attributes: [{
-                    name: "title",
-                    value: 'Left Justify'
-                }, {
-                    name: 'ng-click',
-                    value: 'format(\'justifyleft\')'
-                }, {
-                    name: 'ng-class',
-                    value: '{ active: isLeftJustified }'
-                }],
-                data: [{
-                    tag: 'i',
-                    classes: 'fa fa-align-left'
-                }]
-            },
-            'center-justify': {
-                tag: 'button',
-                classes: 'btn btn-default',
-                attributes: [{
-                    name: "title",
-                    value: 'Center Justify'
-                }, {
-                    name: 'ng-click',
-                    value: 'format(\'justifycenter\')'
-                }, {
-                    name: 'ng-class',
-                    value: '{ active: isCenterJustified }'
-                }],
-                data: [{
-                    tag: 'i',
-                    classes: 'fa fa-align-center'
-                }]
-            },
-            'right-justify': {
-                tag: 'button',
-                classes: 'btn btn-default',
-                attributes: [{
-                    name: "title",
-                    value: 'Right Justify'
-                }, {
-                    name: 'ng-click',
-                    value: 'format(\'justifyright\')'
-                }, {
-                    name: 'ng-class',
-                    value: '{ active: isRightJustified }'
-                }],
-                data: [{
-                    tag: 'i',
-                    classes: 'fa fa-align-right'
-                }]
-            },
-            'code': {
-                tag: 'button',
-                classes: 'btn btn-default',
-                attributes: [{
-                    name: "title",
-                    value: 'Code'
-                }, {
-                    name: 'ng-click',
-                    value: 'format(\'formatblock\', \'pre\')'
-                }, {
-                    name: 'ng-class',
-                    value: '{ active: isPre }'
-                }],
-                data: [{
-                    tag: 'i',
-                    classes: 'fa fa-code'
-                }]
-            },
-            'quote': {
-                tag: 'button',
-                classes: 'btn btn-default',
-                attributes: [{
-                    name: "title",
-                    value: 'Quote'
-                }, {
-                    name: 'ng-click',
-                    value: 'format(\'formatblock\', \'blockquote\')'
-                }, {
-                    name: 'ng-class',
-                    value: '{ active: isBlockquote }'
-                }],
-                data: [{
-                    tag: 'i',
-                    classes: 'fa fa-quote-right'
-                }]
-            },
-            'paragraph': {
-                tag: 'button',
-                classes: 'btn btn-default',
-                text: 'P',
-                attributes: [{
-                    name: "title",
-                    value: 'Paragragh'
-                }, {
-                    name: 'ng-click',
-                    value: 'format(\'insertParagraph\')'
-                }, {
-                    name: 'ng-class',
-                    value: '{ active: isParagraph }'
-                }]
-            },
-            'image': {
-                tag: 'button',
-                classes: 'btn btn-default',
-                attributes: [{
-                    name: "title",
-                    value: 'Image'
-                }, {
-                    name: 'ng-click',
-                    value: 'insertImage()'
-                }],
-                data: [{
-                    tag: 'i',
-                    classes: 'fa fa-picture-o'
-                }]
-            },
-            'font-color': {
-                tag: 'button',
-                classes: 'btn btn-default wysiwyg-colorpicker wysiwyg-fontcolor',
-                text: 'A',
-                attributes: [{
-                    name: "title",
-                    value: 'Font Color'
-                }, {
-                    name: 'colorpicker',
-                    value: 'rgba'
-                }, {
-                    name: 'colorpicker-position',
-                    value: 'top'
-                }, {
-                    name: 'ng-model',
-                    value: 'fontColor'
-                }, {
-                    name: 'ng-change',
-                    value: 'setFontColor()'
-                }]
-            },
-            'hilite-color': {
-                tag: 'button',
-                classes: 'btn btn-default wysiwyg-colorpicker wysiwyg-fontcolor',
-                text: 'H',
-                attributes: [{
-                    name: "title",
-                    value: 'Hilite Color'
-                }, {
-                    name: 'colorpicker',
-                    value: 'rgba'
-                }, {
-                    name: 'colorpicker-position',
-                    value: 'top'
-                }, {
-                    name: 'ng-model',
-                    value: 'hiliteColor'
-                }, {
-                    name: 'ng-change',
-                    value: 'setHiliteColor()'
-                }]
-            },
-            'font': {
-                tag: 'select',
-                classes: 'form-control wysiwyg-select',
-                attributes: [{
-                    name: "title",
-                    value: 'Image'
-                }, {
-                    name: 'ng-model',
-                    value: 'font'
-                }, {
-                    name: 'ng-options',
-                    value: 'f for f in fonts'
-                }, {
-                    name: 'ng-change',
-                    value: 'setFont()'
-                }]
-            },
-            'font-size': {
-                tag: 'select',
-                classes: 'form-control wysiwyg-select',
-                attributes: [{
-                    name: "title",
-                    value: 'Image'
-                }, {
-                    name: 'ng-model',
-                    value: 'fontSize'
-                }, {
-                    name: 'ng-options',
-                    value: 'f.size for f in fontSizes'
-                }, {
-                    name: 'ng-change',
-                    value: 'setFontSize()'
-                }]
-            },
-            'link': {
-                tag: 'button',
-                classes: 'btn btn-default',
-                attributes: [{
-                    name: "title",
-                    value: 'Link'
-                }, {
-                    name: 'ng-click',
-                    value: 'createLink()'
-                }, {
-                    name: 'ng-show',
-                    value: '!isLink'
-                }],
-                data: [{
-                    tag: 'i',
-                    classes: 'fa fa-link'
-                }]
-            },
-            'unlink': {
-                tag: 'button',
-                classes: 'btn btn-default',
-                attributes: [{
-                    name: "title",
-                    value: 'Unlink'
-                }, {
-                    name: 'ng-click',
-                    value: 'format(\'unlink\')'
-                }, {
-                    name: 'ng-show',
-                    value: 'isLink'
-                }],
-                data: [{
-                    tag: 'i',
-                    classes: 'fa fa-unlink'
-                }]
-            }
-        });
-})(angular)
+    });
